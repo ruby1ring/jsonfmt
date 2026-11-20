@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSON 格式化</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='21.5' font-family='Menlo,monospace' font-size='14' font-weight='700' fill='white' text-anchor='middle'%3E%7B%7D%3C/text%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --line: #e3e5e9;
+  --text: #1d2129;
+  --muted: #6b7280;
+  --gutter: #a8adb6;
+  --hover: #f3f5f8;
+  --selection: rgba(37, 99, 235, .18);
+  --accent: #2563eb;
+  --accent-soft: rgba(37, 99, 235, .1);
+  --ok: #16a34a;
+  --bad: #d92d20;
+  --bad-soft: rgba(217, 45, 32, .09);
+  --bad-line: rgba(217, 45, 32, .05);
+  --key: #9a3412;
+  --str: #0a7f3f;
+  --num: #1d4ed8;
+  --bool: #9333ea;
+  --null: #8a8f98;
+  --punc: #8a8f98;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1013;
+    --panel: #16191e;
+    --line: #262a31;
+    --text: #e3e5e8;
+    --muted: #8b919c;
+    --gutter: #4b515c;
+    --hover: #1c2026;
+    --selection: rgba(79, 142, 247, .28);
+    --accent: #4f8ef7;
+    --accent-soft: rgba(79, 142, 247, .16);
+    --ok: #3fb950;
+    --bad: #f47067;
+    --bad-soft: rgba(244, 112, 103, .13);
+    --bad-line: rgba(244, 112, 103, .06);
+    --key: #e6a663;
+    --str: #8ddb8c;
+    --num: #79b8ff;
+    --bool: #d2a8ff;
+    --null: #8b919c;
+    --punc: #7d8590;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font: 13px/1.5 var(--sans); display: flex; flex-direction: column; }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-right: 6px; }
+.logo { font-family: var(--mono); background: var(--accent); color: #fff; border-radius: 6px; padding: 0 6px; font-size: 12px; line-height: 20px; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 3px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--accent); color: #fff; }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 3px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { background: var(--hover); color: var(--text); }
+.btn.danger, .btn.danger:hover { background: var(--bad); border-color: var(--bad); color: #fff; }
+select { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 3px 6px; cursor: pointer; }
+label.opt { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; user-select: none; }
+label.opt input { accent-color: var(--accent); margin: 0; }
+.spacer { flex: 1; }
+
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px; }
+.pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.pane-head { display: flex; align-items: center; gap: 10px; padding: 5px 8px 5px 14px; border-bottom: 1px solid var(--line); font-size: 12px; min-height: 38px; }
+.pane-head .title { font-weight: 600; color: var(--text); white-space: nowrap; }
+.tools { display: flex; gap: 4px; margin-left: auto; }
+.save { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.save.saved::before { content: "✓ "; color: var(--ok); }
+.save.error { color: var(--bad); cursor: pointer; }
+.pane { position: relative; }
+.stale-tip {
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 5; white-space: nowrap;
+  font-size: 12px; color: var(--bad); background: var(--panel); border: 1px solid var(--bad-soft);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .12); border-radius: 14px; padding: 3px 12px; pointer-events: none;
+}
+.stale-tip[hidden] { display: none; }
+.pane.stale .cm-placeholder { visibility: hidden; }
+.editor { flex: 1; min-height: 0; }
+.pane.stale .cm-content, .pane.stale .cm-gutters { opacity: .4; transition: opacity .2s; }
+
+/* 错误提示：出错的位置画波浪线，出错的行淡淡标红，行尾直接写出原因 */
+.cm-line.cm-err-line { background: var(--bad-line); }
+.cm-err-mark { text-decoration: underline wavy var(--bad); text-decoration-skip-ink: none; text-underline-offset: 3px; }
+.cm-err-related { background: var(--bad-soft); border-radius: 3px; box-shadow: 0 0 0 1px var(--bad-soft); }
+.cm-err-lens {
+  display: inline-block; margin-left: 14px; padding: 0 9px; border-radius: 10px; max-width: calc(100% - 14px);
+  background: var(--bad-soft); color: var(--bad); font: 11.5px/1.75 var(--sans); white-space: normal;
+  animation: lens-in .18s ease-out;
+}
+@keyframes lens-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+
+footer { display: flex; align-items: center; gap: 12px; padding: 8px 16px; font-size: 12px; color: var(--muted); min-height: 36px; flex-wrap: wrap; }
+#status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+footer .ok { color: var(--ok); }
+footer .bad { color: var(--bad); }
+footer .note { color: var(--text); }
+footer .keys { margin-left: auto; opacity: .8; }
+kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+
+.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .25); opacity: 0; pointer-events: none; transition: opacity .18s; z-index: 9; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); z-index: 10;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgba(0, 0, 0, .15);
+  transform: translateX(105%); transition: transform .18s ease; display: flex; flex-direction: column;
+}
+body.drawer-open .scrim { opacity: 1; pointer-events: auto; }
+body.drawer-open .drawer { transform: none; }
+.drawer-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+.drawer-head strong { font-size: 14px; margin-right: 4px; }
+#q { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 4px 9px; outline: none; }
+#q:focus { border-color: var(--accent); }
+#list { list-style: none; margin: 0; padding: 6px; overflow: auto; flex: 1; }
+#list li { padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+#list li:hover { background: var(--hover); }
+#list li.current { border-color: var(--accent-soft); background: var(--accent-soft); }
+#list li.none { cursor: default; color: var(--muted); text-align: center; padding: 40px 0; }
+#list li.none:hover { background: none; }
+.meta { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11.5px; }
+.meta .tag { color: var(--accent); }
+.meta .del { margin-left: auto; border: 0; background: none; cursor: pointer; color: var(--muted); opacity: 0; padding: 0 4px; border-radius: 4px; }
+#list li:hover .del { opacity: 1; }
+.meta .del:hover { color: var(--bad); background: var(--bad-soft); }
+.pv { font: 12px/1.5 var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 52px; transform: translate(-50%, 8px); z-index: 20;
+  background: var(--text); color: var(--bg); padding: 6px 14px; border-radius: 8px; font-size: 12.5px;
+  opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  footer .keys { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">{ }</span>JSON 格式化</div>
+  <div class="seg" id="modes">
+    <button data-mode="format">格式化</button>
+    <button data-mode="minify">压缩</button>
+    <button data-mode="escape">转义</button>
+    <button data-mode="unescape">去转义</button>
+  </div>
+  <select id="indent" title="缩进">
+    <option value="2">2 空格</option>
+    <option value="4">4 空格</option>
+    <option value="tab">Tab</option>
+  </select>
+  <label class="opt"><input type="checkbox" id="sort">键排序</label>
+  <div class="spacer"></div>
+  <button class="btn" id="historyBtn">历史记录</button>
+</header>
+
+<main>
+  <section class="pane" id="leftPane">
+    <div class="pane-head">
+      <span class="title">原文</span>
+      <span class="save" id="saveState"></span>
+      <div class="tools"><button class="btn ghost" id="clearBtn">清空</button></div>
+    </div>
+    <div class="editor" id="left"></div>
+  </section>
+  <section class="pane" id="rightPane">
+    <div class="pane-head">
+      <span class="title" id="rightTitle">格式化结果</span>
+      <div class="tools">
+        <button class="btn ghost" id="expandBtn">全部展开</button>
+        <button class="btn ghost" id="collapseBtn">折叠一层</button>
+        <button class="btn primary" id="copyBtn">复制</button>
+      </div>
+    </div>
+    <div class="editor" id="right"></div>
+    <div class="stale-tip" id="staleTip" hidden>原文有错误，改好后这里会自动更新</div>
+  </section>
+</main>
+
+<footer>
+  <span id="status"></span>
+  <span class="keys">两边都能改，自动同步 · 自动保存到历史 · <kbd>⌘</kbd><kbd>F</kbd> 查找 · <kbd>⌘</kbd><kbd>Z</kbd> 撤销</span>
+</footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer">
+  <div class="drawer-head">
+    <strong>历史记录</strong>
+    <input id="q" placeholder="搜索内容" autocomplete="off">
+    <button class="btn ghost" id="clearAllBtn">清空</button>
+    <button class="btn ghost" id="closeBtn" title="关闭">✕</button>
+  </div>
+  <ul id="list"></ul>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script src="/codemirror.js"></script>
+<script>
+const {
+  EditorView, EditorState, Compartment, StateField, StateEffect, Transaction, Decoration, WidgetType,
+  keymap, placeholder, basicSetup, json, foldEffect, unfoldAll, ensureSyntaxTree,
+  HighlightStyle, syntaxHighlighting, indentUnit, tags, indentWithTab,
+} = CM;
+
+const $ = (id) => document.getElementById(id);
+const statusEl = $('status');
+const listEl = $('list');
+const TITLES = { format: '格式化结果', minify: '压缩结果', escape: '转义结果', unescape: '去转义结果' };
+
+const state = { mode: 'format', indent: '2', sort: false };
+// 设置存在浏览器本地，只是便利功能：读写失败就用默认设置
+try { Object.assign(state, JSON.parse(localStorage.getItem('jsonfmt.settings') || '{}')); } catch (error) { console.warn('load settings', error); }
+
+// ---------- JSON 解析 ----------
+// 自己写而不用 JSON.parse：保留原始数字文本（大整数不丢精度）、保留键顺序，并且出错时能说清楚是哪里、为什么错。
+// 节点：{t:'o', k:[原始键], v:[子节点]} / {t:'a', v:[...]} / {t:'s'|'n'|'b'|'z', v:原始文本}
+// 出错时抛出的 Error 带 from/to（要标出来的范围），以及可选的 related（相关位置，比如没闭合的那个括号）
+const FULL_WIDTH = { '，': ',', '：': ':', '“': '"', '”': '"', '‘': '"', '’': '"', '｛': '{', '｝': '}', '［': '[', '］': ']', '【': '[', '】': ']' };
+const INVISIBLE = { ' ': '不换行空格', '　': '全角空格', '​': '零宽空格', '﻿': 'BOM 字符' };
+
+function positioned(message, from, to, related) {
+  const error = new Error(message);
+  error.from = from;
+  error.to = to;
+  error.related = related;
+  return error;
+}
+
+function parse(src) {
+  let i = 0;
+  const n = src.length;
+  const fail = (message, from = i, to = from + 1, related) => { throw positioned(message, from, Math.min(to, n), related); };
+  const lineOf = (pos) => src.slice(0, pos).split('\n').length;
+  const brief = (text) => (text.length > 24 ? text.slice(0, 24) + '…' : text);
+  const wordAt = (pos) => /^[^\s,:{}[\]"']+/.exec(src.slice(pos, pos + 200))?.[0] ?? src[pos];
+  const fullWidth = (c) => {
+    const name = c === '，' ? '中文逗号' : c === '：' ? '中文冒号' : '“”‘’'.includes(c) ? '中文引号' : '全角括号';
+    fail(`这里用了${name}「${c}」，要换成英文的 ${FULL_WIDTH[c]}`);
+  };
+
+  const skip = () => {
+    while (i < n && (src[i] === ' ' || src[i] === '\n' || src[i] === '\r' || src[i] === '\t')) i++;
+    if (src[i] === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) {
+      const end = src[i + 1] === '/' ? src.indexOf('\n', i) : src.indexOf('*/', i + 2) + 2;
+      fail('JSON 不支持注释，需要删掉', i, end > i ? end : n);
+    }
+    if (INVISIBLE[src[i]]) fail(`这里有一个看不见的${INVISIBLE[src[i]]}，JSON 不认，删掉或换成普通空格`);
+  };
+
+  const readString = () => {
+    const start = i++;
+    while (i < n) {
+      const code = src.charCodeAt(i);
+      if (code === 34) return src.slice(start, ++i);
+      if (code === 92) {
+        const next = src[i + 1];
+        if (next === 'u') {
+          if (!/^[0-9a-fA-F]{4}$/.test(src.slice(i + 2, i + 6))) fail('\\u 后面要跟 4 位十六进制数字，比如 \\u4e2d', i, i + 6);
+          i += 6;
+          continue;
+        }
+        if (next !== undefined && '"\\/bfnrt'.includes(next)) { i += 2; continue; }
+        fail(`\\${next ?? ''} 不是合法的转义；反斜杠本身要写成 \\\\`, i, i + 2);
+      }
+      if (code === 10 || code === 13) fail('字符串缺少右引号 "（字符串里也不能直接换行，换行要写成 \\n）', start, i);
+      if (code === 9) fail('字符串里不能直接放 Tab，要写成 \\t');
+      if (code < 32) fail('字符串里有看不见的控制字符，需要删掉');
+      i++;
+    }
+    fail('字符串缺少右引号 "', start, n);
+  };
+
+  const readNumber = () => {
+    const start = i;
+    const token = /^[-+.\w]+/.exec(src.slice(i, i + 400))[0];
+    if (/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(token)) {
+      i += token.length;
+      return { t: 'n', v: token };
+    }
+    let message = `${brief(token)} 不是合法的数字`;
+    if (/^-?Infinity$/.test(token)) message = 'JSON 不支持 Infinity，可以改成 null 或字符串';
+    else if (token[0] === '+') message = '数字前面不能带 + 号';
+    else if (/^-?0[xX]/.test(token)) message = 'JSON 不支持十六进制，要换成十进制数字';
+    else if (/^-?0\d/.test(token)) message = `数字不能以 0 开头；如果要保留前导 0，写成字符串 "${brief(token)}"`;
+    else if (/^-?\./.test(token)) message = '小数点前面要有数字，比如 .5 要写成 0.5';
+    else if (/\.($|[eE])/.test(token)) message = '小数点后面要有数字，比如 1. 要写成 1 或 1.0';
+    else if (/[eE][+-]?$/.test(token)) message = '科学计数法的 e 后面要有数字';
+    else if (/^-?\d/.test(token)) message = `${brief(token)} 不是合法的数字；如果是字符串，要加英文双引号："${brief(token)}"`;
+    fail(message, start, start + token.length);
+  };
+
+  // context：对象里某个键的值，出错时用来说「哪个键后面缺少值」
+  const readValue = (context) => {
+    const c = src[i];
+    if (c === '{') return readObject();
+    if (c === '[') return readArray();
+    if (c === '"') return { t: 's', v: readString() };
+    if (c === '-' || c === '+' || c === '.' || (c >= '0' && c <= '9')) return readNumber();
+    if (FULL_WIDTH[c]) fullWidth(c);
+    if (c === "'") {
+      const end = src.indexOf("'", i + 1);
+      fail('字符串要用英文双引号 "，不能用单引号', i, end < 0 ? i + 1 : end + 1);
+    }
+    if (c === undefined || c === ',' || c === '}' || c === ']') {
+      if (context) fail(`${context.name} 后面缺少值`, context.from, context.to);
+      fail(c === ',' ? '这里多了一个逗号' : '这里缺少一个值');
+    }
+    const word = wordAt(i);
+    if (word === 'true' || word === 'false' || word === 'null') {
+      i += word.length;
+      return { t: word === 'null' ? 'z' : 'b', v: word };
+    }
+    const end = i + word.length;
+    const lower = word.toLowerCase();
+    if (lower === 'true' || lower === 'false' || lower === 'null') fail(`要写成小写的 ${lower}`, i, end);
+    if (word === 'None') fail('要写成 null（JSON 里没有 None）', i, end);
+    if (word === 'undefined') fail('JSON 里没有 undefined，可以改成 null', i, end);
+    if (word === 'NaN' || word === 'Infinity') fail(`JSON 不支持 ${word}，可以改成 null 或字符串`, i, end);
+    if (/^[\p{L}_$]/u.test(word)) fail(`${brief(word)} 不是合法的值；如果是字符串，要加英文双引号："${brief(word)}"`, i, end);
+    fail(`这里出现了无法识别的字符 ${c}`);
+  };
+
+  const readObject = () => {
+    const open = i;
+    const openRange = { from: open, to: open + 1 };
+    const unclosed = () => fail('这个 { 没有闭合，缺少对应的 }', open, open + 1);
+    const mismatch = () => fail(`这里应该用 } 来闭合第 ${lineOf(open)} 行的 {，而不是 ]`, i, i + 1, openRange);
+    const node = { t: 'o', k: [], v: [] };
+    i++;
+    skip();
+    if (src[i] === '}') { i++; return node; }
+    for (;;) {
+      if (i >= n) unclosed();
+      const c = src[i];
+      if (c !== '"') {
+        if (FULL_WIDTH[c]) fullWidth(c);
+        if (c === "'") {
+          const end = src.indexOf("'", i + 1);
+          fail('键名要用英文双引号 "，不能用单引号', i, end < 0 ? i + 1 : end + 1);
+        }
+        if (c === ',') fail('这里多了一个逗号');
+        if (c === ']') mismatch();
+        const word = wordAt(i);
+        if (/^[\p{L}\p{N}_$-]+$/u.test(word)) fail(`键名要加英文双引号：把 ${brief(word)} 改成 "${brief(word)}"`, i, i + word.length);
+        fail('这里应该是一个用英文双引号包起来的键名');
+      }
+      const keyFrom = i;
+      const key = readString();
+      const keyTo = i;
+      skip();
+      if (src[i] !== ':') {
+        if (i >= n) unclosed();
+        if (FULL_WIDTH[src[i]]) fullWidth(src[i]);
+        fail(`键 ${brief(key)} 后面缺少冒号 :`, keyFrom, keyTo);
+      }
+      i++;
+      skip();
+      const valueFrom = i;
+      node.k.push(key);
+      node.v.push(readValue({ name: brief(key), from: keyFrom, to: keyTo }));
+      const valueTo = i;
+      skip();
+      if (src[i] === '}') { i++; return node; }
+      if (src[i] === ',') {
+        const comma = i;
+        i++;
+        skip();
+        if (src[i] === '}') fail('最后一项后面不能有逗号，删掉它', comma, comma + 1);
+        continue;
+      }
+      if (i >= n) unclosed();
+      if (src[i] === ']') mismatch();
+      if (FULL_WIDTH[src[i]]) fullWidth(src[i]);
+      // 缺逗号：标出前一个值，光标定位时会停在它后面，正好是要补逗号的地方
+      const isContainer = src[valueTo - 1] === '}' || src[valueTo - 1] === ']';
+      if (isContainer) fail(`${src[valueTo - 1]} 后面少了一个逗号 ,`, valueTo - 1, valueTo);
+      fail(`${brief(src.slice(valueFrom, valueTo))} 后面少了一个逗号 ,`, valueFrom, valueTo);
+    }
+  };
+
+  const readArray = () => {
+    const open = i;
+    const openRange = { from: open, to: open + 1 };
+    const unclosed = () => fail('这个 [ 没有闭合，缺少对应的 ]', open, open + 1);
+    const mismatch = () => fail(`这里应该用 ] 来闭合第 ${lineOf(open)} 行的 [，而不是 }`, i, i + 1, openRange);
+    const node = { t: 'a', v: [] };
+    i++;
+    skip();
+    if (src[i] === ']') { i++; return node; }
+    for (;;) {
+      if (i >= n) unclosed();
+      if (src[i] === ',') fail('这里多了一个逗号');
+      if (src[i] === '}') mismatch();
+      const valueFrom = i;
+      node.v.push(readValue(null));
+      const valueTo = i;
+      skip();
+      if (src[i] === ']') { i++; return node; }
+      if (src[i] === ',') {
+        const comma = i;
+        i++;
+        skip();
+        if (src[i] === ']') fail('最后一项后面不能有逗号，删掉它', comma, comma + 1);
+        continue;
+      }
+      if (i >= n) unclosed();
+      if (src[i] === '}') mismatch();
+      if (FULL_WIDTH[src[i]]) fullWidth(src[i]);
+      const isContainer = src[valueTo - 1] === '}' || src[valueTo - 1] === ']';
+      if (isContainer) fail(`${src[valueTo - 1]} 后面少了一个逗号 ,`, valueTo - 1, valueTo);
+      fail(`${brief(src.slice(valueFrom, valueTo))} 后面少了一个逗号 ,`, valueFrom, valueTo);
+    }
+  };
+
+  skip();
+  const root = readValue(null);
+  skip();
+  if (i < n) {
+    const c = src[i];
+    let lineEnd = src.indexOf('\n', i);
+    if (lineEnd < 0) lineEnd = n;
+    if (c === '}' || c === ']') fail(`多了一个 ${c}，前面的括号已经全部配对了`);
+    if (c === ',') fail('JSON 到这里已经结束了，这个逗号是多余的');
+    if (FULL_WIDTH[c]) fullWidth(c);
+    if (c === '{' || c === '[' || c === '"') fail('最外层只能有一个值，这里又开始了一段新内容；多条数据请放进数组 [ ]', i, lineEnd);
+    fail('JSON 到这里已经结束了，后面多出了内容', i, lineEnd);
+  }
+  return root;
+}
+
+// 子节点的输出顺序：开了键排序时按解码后的键名排
+function order(node) {
+  const indexes = node.v.map((_, index) => index);
+  if (state.sort && node.t === 'o') {
+    const keys = node.k.map((key) => JSON.parse(key));
+    indexes.sort((a, b) => (keys[a] < keys[b] ? -1 : keys[a] > keys[b] ? 1 : 0));
+  }
+  return indexes;
+}
+
+// unit 为空字符串时输出压缩格式
+function stringify(node, unit, depth = 0) {
+  if (node.t !== 'o' && node.t !== 'a') return node.v;
+  const [open, close] = node.t === 'o' ? ['{', '}'] : ['[', ']'];
+  if (!node.v.length) return open + close;
+  const newline = unit ? '\n' : '';
+  const inner = unit.repeat(depth + 1);
+  const parts = order(node).map((index) =>
+    inner + (node.t === 'o' ? node.k[index] + (unit ? ': ' : ':') : '') + stringify(node.v[index], unit, depth + 1));
+  return open + newline + parts.join(',' + newline) + newline + unit.repeat(depth) + close;
+}
+
+function unitText() {
+  return state.indent === 'tab' ? '\t' : ' '.repeat(Number(state.indent));
+}
+
+// ---------- 左 → 右：按当前模式转换 ----------
+// form 只在去转义模式下有意义，记录原文是什么形态，右侧改动反推回左侧时按同样的形态写回
+function convert(text) {
+  const unit = unitText();
+  if (state.mode !== 'unescape') {
+    const root = parse(text);
+    if (state.mode === 'format') return { root, out: stringify(root, unit) };
+    if (state.mode === 'minify') return { root, out: stringify(root, '') };
+    return { root, out: JSON.stringify(stringify(root, '')) };
+  }
+
+  let root = null;
+  let parseError = null;
+  try {
+    root = parse(text);
+  } catch (error) {
+    parseError = error; // 可能是不带外层引号的转义内容，下面再判断
+  }
+  if (root && root.t !== 's') return { root, out: stringify(root, unit), form: 'plain', note: '内容本来就没有转义，已直接格式化' };
+
+  let form = 'quoted';
+  let literal = text.trim();
+  if (!root) {
+    // 里面有没转义的双引号，说明它不是转义内容，而是一段有错的普通 JSON，直接报 JSON 的错
+    for (let k = 0; k < literal.length; k++) {
+      if (literal[k] === '\\') { k++; continue; }
+      if (literal[k] === '"') throw parseError;
+    }
+    form = 'bare';
+    const offset = text.length - text.trimStart().length - 1;
+    literal = '"' + literal + '"';
+    try {
+      parse(literal);
+    } catch (error) {
+      error.from = Math.max(0, error.from + offset);
+      error.to = Math.max(error.from + 1, error.to + offset);
+      throw error;
+    }
+  }
+  const decoded = JSON.parse(literal);
+  try {
+    const inner = parse(decoded);
+    return { root: inner, out: stringify(inner, unit), form };
+  } catch (error) {
+    return { root: null, out: decoded, form: form + '-text', note: `去转义后不是 JSON（${error.message}），按纯文本显示` };
+  }
+}
+
+// ---------- 右 → 左：把右侧的修改反推回原文 ----------
+function reverse(text) {
+  if (state.mode === 'format' || state.mode === 'minify' || (state.mode === 'unescape' && lastForm === 'plain')) {
+    return { left: text, root: parse(text) };
+  }
+  if (state.mode === 'escape') {
+    const root = parse(text);
+    let firstLineEnd = text.indexOf('\n');
+    if (firstLineEnd < 0) firstLineEnd = text.length;
+    if (root.t !== 's') throw positioned('转义结果应该是一个用英文双引号包起来的字符串', 0, 1);
+    const decoded = JSON.parse(text);
+    try {
+      return { left: decoded, root: parse(decoded) };
+    } catch (error) {
+      throw positioned('引号里的内容去转义后不是有效 JSON：' + error.message, 0, firstLineEnd);
+    }
+  }
+  // 去转义模式：把右侧内容重新转义，按原文原来带不带外层引号写回左侧
+  const quoted = lastForm !== 'bare' && lastForm !== 'bare-text';
+  let escaped;
+  let root = null;
+  if (lastForm === 'quoted-text' || lastForm === 'bare-text') {
+    escaped = JSON.stringify(text);
+  } else {
+    root = parse(text);
+    escaped = JSON.stringify(stringify(root, ''));
+  }
+  return { left: quoted ? escaped : escaped.slice(1, -1), root };
+}
+
+// ---------- 编辑器 ----------
+const setErrorEffect = StateEffect.define();
+
+class ErrorLens extends WidgetType {
+  constructor(message) { super(); this.message = message; }
+  eq(other) { return other.message === this.message; }
+  toDOM() {
+    const element = document.createElement('span');
+    element.className = 'cm-err-lens';
+    element.textContent = this.message;
+    return element;
+  }
+}
+
+const errorField = StateField.define({
+  create: () => Decoration.none,
+  update(decorations, transaction) {
+    decorations = decorations.map(transaction.changes);
+    for (const effect of transaction.effects) {
+      if (!effect.is(setErrorEffect)) continue;
+      decorations = Decoration.none;
+      const error = effect.value;
+      if (!error) continue;
+      const doc = transaction.state.doc;
+      const from = Math.min(error.from, doc.length);
+      const to = Math.min(Math.max(error.to, from), doc.length);
+      const line = doc.lineAt(from);
+      const ranges = [
+        Decoration.line({ class: 'cm-err-line' }).range(line.from),
+        Decoration.widget({ widget: new ErrorLens(error.message), side: 1 }).range(line.to),
+      ];
+      if (to > from) ranges.push(Decoration.mark({ class: 'cm-err-mark' }).range(from, to));
+      if (error.related) ranges.push(Decoration.mark({ class: 'cm-err-related' }).range(error.related.from, error.related.to));
+      decorations = Decoration.set(ranges, true);
+    }
+    return decorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+const highlightStyle = HighlightStyle.define([
+  { tag: tags.propertyName, color: 'var(--key)' },
+  { tag: tags.string, color: 'var(--str)' },
+  { tag: tags.number, color: 'var(--num)' },
+  { tag: tags.bool, color: 'var(--bool)' },
+  { tag: tags.null, color: 'var(--null)' },
+  { tag: [tags.separator, tags.brace, tags.squareBracket], color: 'var(--punc)' },
+]);
+
+const editorTheme = EditorView.theme({
+  '&': { height: '100%', fontSize: '12.5px', backgroundColor: 'transparent', color: 'var(--text)' },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-scroller': { fontFamily: 'var(--mono)', lineHeight: '1.65' },
+  '.cm-content': { padding: '10px 0', caretColor: 'var(--text)' },
+  '.cm-gutters': { backgroundColor: 'var(--panel)', color: 'var(--gutter)', border: 'none', paddingLeft: '4px' },
+  '.cm-activeLine': { backgroundColor: 'var(--hover)' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--muted)' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--text)' },
+  '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'var(--selection) !important' },
+  '.cm-foldPlaceholder': { backgroundColor: 'var(--accent-soft)', color: 'var(--accent)', border: 'none', padding: '0 6px', borderRadius: '4px', margin: '0 3px' },
+  '.cm-foldGutter .cm-gutterElement': { color: 'var(--muted)', cursor: 'pointer', padding: '0 4px' },
+  '&.cm-focused .cm-matchingBracket': { backgroundColor: 'var(--accent-soft)', color: 'inherit' },
+  '.cm-selectionMatch': { backgroundColor: 'var(--accent-soft)' },
+  '.cm-placeholder': { color: 'var(--muted)', fontFamily: 'var(--sans)' },
+  '.cm-panels': { backgroundColor: 'var(--panel)', color: 'var(--text)' },
+  '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--line)' },
+  '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--line)' },
+  '.cm-search': { fontSize: '12px', padding: '6px 8px', fontFamily: 'var(--sans)' },
+  '.cm-textfield': { border: '1px solid var(--line)', borderRadius: '5px', backgroundColor: 'var(--bg)', color: 'var(--text)', padding: '2px 6px' },
+  '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '5px', color: 'var(--text)', padding: '2px 8px' },
+  '.cm-searchMatch': { backgroundColor: 'rgba(250, 204, 21, .3)' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'rgba(250, 150, 21, .5)' },
+});
+
+const PHRASES = {
+  'Find': '查找', 'Replace': '替换为', 'next': '下一个', 'previous': '上一个', 'all': '全部',
+  'match case': '区分大小写', 'regexp': '正则', 'by word': '全词匹配', 'replace': '替换', 'replace all': '全部替换',
+  'close': '关闭', 'Go to line': '跳到行', 'go': '跳转', 'Folded lines': '已折叠的行', 'Unfolded lines': '已展开的行',
+  'Fold line': '折叠', 'Unfold line': '展开', 'folded code': '已折叠', 'unfold': '展开',
+};
+
+const indentCompartment = new Compartment();
+const readOnlyCompartment = new Compartment();
+let syncing = false; // 程序往编辑器里写内容时置位，不当作用户修改
+
+function createEditor(parent, placeholderText, onUserChange) {
+  return new EditorView({
+    parent,
+    state: EditorState.create({
+      extensions: [
+        basicSetup,
+        keymap.of([indentWithTab]),
+        json(),
+        syntaxHighlighting(highlightStyle),
+        editorTheme,
+        EditorView.lineWrapping,
+        placeholder(placeholderText),
+        EditorState.phrases.of(PHRASES),
+        errorField,
+        indentCompartment.of(indentUnit.of(unitText())),
+        readOnlyCompartment.of(EditorState.readOnly.of(false)),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged && !syncing) onUserChange(update);
+        }),
+      ],
+    }),
+  });
+}
+
+const left = createEditor($('left'), '在这里粘贴或输入 JSON', onLeftChange);
+const right = createEditor($('right'), '结果显示在这里，也可以直接在这里改，改完会同步回左边', onRightChange);
+
+// 只替换前后不同的那一段，这样另一侧没变的部分折叠状态和滚动位置都还在；也不进撤销历史
+function setDoc(view, text) {
+  const old = view.state.doc.toString();
+  if (old === text) return;
+  let start = 0;
+  const max = Math.min(old.length, text.length);
+  while (start < max && old.charCodeAt(start) === text.charCodeAt(start)) start++;
+  let oldEnd = old.length;
+  let newEnd = text.length;
+  while (oldEnd > start && newEnd > start && old.charCodeAt(oldEnd - 1) === text.charCodeAt(newEnd - 1)) { oldEnd--; newEnd--; }
+  syncing = true;
+  view.dispatch({ changes: { from: start, to: oldEnd, insert: text.slice(start, newEnd) }, annotations: Transaction.addToHistory.of(false) });
+  syncing = false;
+}
+
+function setError(view, error) {
+  view.dispatch({ effects: setErrorEffect.of(error) });
+}
+
+// 原文有错时，右边保留上一次的结果但变淡、只读，免得误改了旧结果又同步回去
+function setStale(stale) {
+  $('rightPane').classList.toggle('stale', stale);
+  $('staleTip').hidden = !stale;
+  right.dispatch({ effects: readOnlyCompartment.reconfigure(EditorState.readOnly.of(stale)) });
+}
+
+// 没有位置信息的意外错误（比如嵌套太深导致栈溢出），也要显示出来，标在第一行
+function asPositioned(error) {
+  if (error.from !== undefined) return error;
+  const message = error instanceof RangeError ? '嵌套层级太深，解析不了' : '解析出错：' + error.message;
+  return positioned(message, 0, 0);
+}
+
+// ---------- 主流程 ----------
+let leftTimer = 0;
+let rightTimer = 0;
+let lastForm = null;
+
+function onLeftChange(update) {
+  const oldText = update.startState.doc.toString();
+  let replacedAll = false;
+  update.changes.iterChangedRanges((fromA, toA) => { if (fromA === 0 && toA === oldText.length) replacedAll = true; });
+  // 从空白开始写、或整篇被替换（全选后粘贴/输入）时，当成一份新内容；旧内容留在历史里
+  if (!oldText.trim() || replacedAll) startNewDoc(oldText);
+
+  clearTimeout(leftTimer);
+  clearTimeout(rightTimer);
+  const pasted = update.transactions.some((tr) => tr.isUserEvent('input.paste') || tr.isUserEvent('input.drop'));
+  if (pasted) {
+    runLeft();
+    saveNow();
+  } else {
+    leftTimer = setTimeout(runLeft, 300);
+    scheduleSave();
+  }
+}
+
+function onRightChange() {
+  clearTimeout(rightTimer);
+  rightTimer = setTimeout(runRight, 300);
+}
+
+function runLeft() {
+  clearTimeout(leftTimer);
+  const text = left.state.doc.toString();
+  setError(right, null);
+  if (!text.trim()) {
+    setError(left, null);
+    setStale(false);
+    setDoc(right, '');
+    statusEl.innerHTML = '';
+    return;
+  }
+  let result;
+  try {
+    result = convert(text);
+  } catch (error) {
+    const problem = asPositioned(error);
+    setError(left, problem);
+    setStale(true);
+    showErrorStatus('原文', left, problem);
+    return;
+  }
+  setError(left, null);
+  setStale(false);
+  lastForm = result.form;
+  setDoc(right, result.out);
+  showOkStatus(result.root, text, result.out, state.mode === 'unescape' ? '去转义完成' : '有效 JSON', result.note);
+}
+
+function runRight() {
+  clearTimeout(rightTimer);
+  const text = right.state.doc.toString();
+  const oldLeft = left.state.doc.toString();
+  if (!text.trim()) {
+    setError(right, null);
+    setDoc(left, '');
+    statusEl.innerHTML = '';
+    return;
+  }
+  let result;
+  try {
+    result = reverse(text);
+  } catch (error) {
+    const problem = asPositioned(error);
+    setError(right, problem);
+    showErrorStatus('结果', right, problem);
+    return;
+  }
+  setError(right, null);
+  setError(left, null);
+  setStale(false);
+  if (result.left !== oldLeft) {
+    if (!oldLeft.trim()) startNewDoc(oldLeft);
+    setDoc(left, result.left);
+    scheduleSave();
+  }
+  showOkStatus(result.root, result.left, text, '已同步到原文');
+}
+
+function showOkStatus(root, leftText, rightText, label, note) {
+  const kind = root ? { o: '对象', a: '数组', s: '字符串', n: '数字', b: '布尔值', z: 'null' }[root.t] : '纯文本';
+  const count = root?.t === 'o' ? ` · ${root.v.length} 个键` : root?.t === 'a' ? ` · ${root.v.length} 项` : '';
+  let extra = note ? `<span class="note">${esc(note)}</span>` : '';
+  // 格式化出来只是一个字符串，而字符串内容本身是 JSON：多半是转义过的，提示去转义
+  if (!note && state.mode === 'format' && root?.t === 's') {
+    try {
+      const inner = parse(JSON.parse(root.v));
+      if (inner.t === 'o' || inner.t === 'a') extra = '<a href="#" id="hintLink">这是转义过的 JSON，点这里去转义 →</a>';
+    } catch (error) { /* 字符串内容不是 JSON，不用提示 */ }
+  }
+  statusEl.innerHTML = `<span class="ok">● ${label}</span><span>${kind}${count} · ${size(leftText)} → ${size(rightText)}</span>${extra}`;
+  if ($('hintLink')) $('hintLink').onclick = (event) => { event.preventDefault(); setMode('unescape'); };
+}
+
+function showErrorStatus(side, view, error) {
+  const line = view.state.doc.lineAt(Math.min(error.from, view.state.doc.length)).number;
+  statusEl.innerHTML = `<span class="bad">● ${side}第 ${line} 行：${esc(error.message)}</span><a href="#" id="jumpLink">定位到这里 →</a>`;
+  $('jumpLink').onclick = (event) => {
+    event.preventDefault();
+    // 光标停在标记范围的末尾：多余的逗号直接退格，缺逗号直接输入
+    const doc = view.state.doc;
+    const at = Math.min(Math.max(error.to, error.from), doc.length);
+    view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+    view.focus();
+  };
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  for (const button of $('modes').children) button.classList.toggle('on', button.dataset.mode === mode);
+  $('rightTitle').textContent = TITLES[mode];
+  saveSettings();
+  runLeft();
+}
+
+function saveSettings() {
+  try { localStorage.setItem('jsonfmt.settings', JSON.stringify(state)); } catch (error) { console.warn('save settings', error); }
+}
+
+// ---------- 历史记录：左侧原文自动保存，同一份内容持续编辑时原地更新那一条 ----------
+let currentDoc = { id: null, saved: '' };
+let saveQueue = Promise.resolve();
+let saveTimer = 0;
+
+function setSaveState(kind, message = '') {
+  const element = $('saveState');
+  element.className = 'save ' + kind;
+  element.textContent = { '': '', dirty: '未保存', saving: '保存中…', saved: '已保存到历史', error: `保存失败：${message}（点击重试）` }[kind];
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  if (left.state.doc.toString() !== currentDoc.saved) setSaveState('dirty');
+  saveTimer = setTimeout(saveNow, 800);
+}
+
+function saveNow() {
+  clearTimeout(saveTimer);
+  return save(currentDoc, left.state.doc.toString());
+}
+
+// 保存排队执行，避免同一份内容并发发出两次新建
+function save(doc, text) {
+  saveQueue = saveQueue.then(async () => {
+    const isCurrent = doc === currentDoc;
+    if (!text.trim()) { if (isCurrent) setSaveState(''); return; }
+    if (text === doc.saved) { if (isCurrent) setSaveState('saved'); return; }
+    if (isCurrent) setSaveState('saving');
+    try {
+      const keepalive = text.length < 60000; // 关页面时也能发出去；keepalive 请求体浏览器限制在 64KB 内
+      let response = null;
+      if (doc.id) {
+        response = await fetch('/api/history/' + doc.id, { method: 'PUT', body: text, keepalive });
+        if (response.status === 404) response = null; // 这条在历史面板里被删了，改为新建
+      }
+      if (!response) response = await fetch('/api/history', { method: 'POST', body: text, keepalive });
+      if (!response.ok) throw new Error(`${response.status} ${(await response.text()).trim()}`);
+      doc.id = (await response.json()).id;
+      doc.saved = text;
+      if (doc === currentDoc) setSaveState(left.state.doc.toString() === doc.saved ? 'saved' : 'dirty');
+      if (document.body.classList.contains('drawer-open')) loadList();
+    } catch (error) {
+      if (doc === currentDoc) setSaveState('error', error.message);
+    }
+  });
+  return saveQueue;
+}
+
+function startNewDoc(oldText) {
+  clearTimeout(saveTimer);
+  if (oldText.trim() && oldText !== currentDoc.saved) save(currentDoc, oldText);
+  currentDoc = { id: null, saved: '' };
+}
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  if (!response.ok) throw new Error(`${response.status} ${(await response.text()).trim()}`);
+  return response;
+}
+
+async function loadList() {
+  const query = $('q').value.trim();
+  let items;
+  try {
+    items = await (await api('/api/history' + (query ? '?q=' + encodeURIComponent(query) : ''))).json();
+  } catch (error) {
+    listEl.innerHTML = `<li class="none">加载失败：${esc(error.message)}</li>`;
+    return;
+  }
+  if (!items.length) {
+    listEl.innerHTML = `<li class="none">${query ? '没有匹配的记录' : '还没有历史记录，编辑的内容会自动保存到这里'}</li>`;
+    return;
+  }
+  listEl.innerHTML = items.map((item) => {
+    const current = item.id === currentDoc.id;
+    return `<li data-id="${item.id}"${current ? ' class="current"' : ''}><div class="meta"><span>${ago(item.time)}</span>`
+      + `<span>${size(item.size)}</span>${current ? '<span class="tag">正在编辑</span>' : ''}`
+      + `<button class="del" title="删除这条">✕</button></div><div class="pv">${esc(item.preview)}</div></li>`;
+  }).join('');
+}
+
+function openDrawer() {
+  document.body.classList.add('drawer-open');
+  loadList();
+  $('q').focus();
+}
+
+function closeDrawer() {
+  document.body.classList.remove('drawer-open');
+}
+
+listEl.addEventListener('click', async (event) => {
+  const item = event.target.closest('li[data-id]');
+  if (!item) return;
+  const id = item.dataset.id;
+  try {
+    if (event.target.closest('.del')) {
+      await api('/api/history/' + id, { method: 'DELETE' });
+      item.remove();
+      if (!listEl.children.length) loadList();
+      return;
+    }
+    const entry = await (await api('/api/history/' + id)).json();
+    startNewDoc(left.state.doc.toString()); // 先把正在编辑、还没存的内容存掉
+    currentDoc = { id: entry.id, saved: entry.content };
+    setDoc(left, entry.content);
+  } catch (error) {
+    toast('操作失败：' + error.message);
+    return;
+  }
+  left.dispatch({ selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0) });
+  closeDrawer();
+  runLeft();
+  setSaveState('saved');
+  left.focus();
+});
+
+// 清空要点两次：第一次按钮变红提示，3 秒内再点才真的清空
+let clearArmTimer = 0;
+$('clearAllBtn').onclick = async () => {
+  const button = $('clearAllBtn');
+  const disarm = () => {
+    clearTimeout(clearArmTimer);
+    clearArmTimer = 0;
+    button.textContent = '清空';
+    button.classList.remove('danger');
+  };
+  if (!clearArmTimer) {
+    button.textContent = '再点一次确认清空';
+    button.classList.add('danger');
+    clearArmTimer = setTimeout(disarm, 3000);
+    return;
+  }
+  disarm();
+  try {
+    await api('/api/history', { method: 'DELETE' });
+  } catch (error) {
+    toast('清空失败：' + error.message);
+    return;
+  }
+  loadList();
+  toast('历史记录已清空');
+};
+
+// ---------- 小工具 ----------
+function esc(text) {
+  return text.replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+}
+
+function size(value) {
+  const bytes = typeof value === 'number' ? value : new Blob([value]).size;
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function ago(time) {
+  const seconds = (Date.now() - time) / 1000;
+  if (seconds < 60) return '刚刚';
+  if (seconds < 3600) return Math.floor(seconds / 60) + ' 分钟前';
+  if (seconds < 86400) return Math.floor(seconds / 3600) + ' 小时前';
+  const date = new Date(time);
+  const two = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+function toast(message) {
+  const element = $('toast');
+  element.textContent = message;
+  element.classList.add('show');
+  clearTimeout(element.timer);
+  element.timer = setTimeout(() => element.classList.remove('show'), 1800);
+}
+
+// ---------- 事件 ----------
+document.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    saveNow().then(() => { if ($('saveState').classList.contains('saved')) toast('已保存到历史'); });
+  }
+  if (event.key === 'Escape') closeDrawer();
+});
+
+// 切走标签页或关闭页面时，把没存的内容补存一次
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && left.state.doc.toString() !== currentDoc.saved) saveNow();
+});
+
+$('saveState').onclick = () => { if ($('saveState').classList.contains('error')) saveNow(); };
+
+$('expandBtn').onclick = () => unfoldAll(right);
+
+// 折叠一层：最外层保持展开，它下面每个多行的对象/数组都收起来
+$('collapseBtn').onclick = () => {
+  const tree = ensureSyntaxTree(right.state, right.state.doc.length, 3000);
+  if (!tree) { toast('内容太大，折叠超时了'); return; }
+  const doc = right.state.doc;
+  const effects = [];
+  tree.iterate({
+    enter(node) {
+      if (node.name !== 'Object' && node.name !== 'Array') return;
+      let depth = 0;
+      for (let parent = node.node.parent; parent; parent = parent.parent) {
+        if (parent.name === 'Object' || parent.name === 'Array') depth++;
+      }
+      if (depth === 0) return;
+      if (doc.lineAt(node.from).number !== doc.lineAt(node.to).number) effects.push(foldEffect.of({ from: node.from + 1, to: node.to - 1 }));
+      return false;
+    },
+  });
+  if (effects.length) right.dispatch({ effects });
+};
+
+$('copyBtn').onclick = async () => {
+  const text = right.state.doc.toString();
+  if (!text) { toast('没有可复制的内容'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    // 有的浏览器环境（内嵌浏览器、非安全来源）不给异步剪贴板权限，改用老的 execCommand 复制
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(area);
+    area.select();
+    const copied = document.execCommand('copy');
+    area.remove();
+    if (!copied) {
+      toast('复制失败，浏览器不允许写剪贴板：' + error.message);
+      return;
+    }
+  }
+  toast('已复制');
+};
+
+// 清空走正常的编辑流程：能 ⌘Z 撤销，被清掉的内容也已经在历史里
+$('clearBtn').onclick = () => {
+  left.dispatch({ changes: { from: 0, to: left.state.doc.length, insert: '' }, userEvent: 'delete' });
+  left.focus();
+};
+
+$('modes').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-mode]');
+  if (button) setMode(button.dataset.mode);
+});
+
+$('indent').onchange = () => {
+  state.indent = $('indent').value;
+  const effects = indentCompartment.reconfigure(indentUnit.of(unitText()));
+  left.dispatch({ effects });
+  right.dispatch({ effects });
+  saveSettings();
+  runLeft();
+};
+$('sort').onchange = () => { state.sort = $('sort').checked; saveSettings(); runLeft(); };
+$('historyBtn').onclick = openDrawer;
+$('closeBtn').onclick = closeDrawer;
+$('scrim').onclick = closeDrawer;
+let searchTimer = 0;
+$('q').addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadList, 200);
+});
+
+// ---------- 初始化 ----------
+$('indent').value = state.indent;
+$('sort').checked = state.sort;
+setMode(state.mode);
+left.focus();
+</script>
+</body>
+</html>
